@@ -1,0 +1,27 @@
+{
+  "name": "Születésnap",
+  "short_name": "Szülinap",
+  "description": "Egy app, ahol számon tarthatjuk mindenki születésnapi kívánságlistáját.",
+  "id": "/szulinap",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "theme_color": "#ff9f43",
+  "background_color": "#ff9f43",
+  "icons": [
+    {
+      "src": "/icon-192.png",
+      "type": "image/png",
+      "sizes": "192x192",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/icon-512.png",
+      "type": "image/png",
+      "sizes": "512x512",
+      "purpose": "any maskable"
+    }
+  ],
+  "prefer_related_applications": false
+}
