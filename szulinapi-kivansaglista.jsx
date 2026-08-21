@@ -317,8 +317,10 @@ function SettingsView({
   t, currentUser, language, onChangeLanguage, onBack,
   displayNameInput, setDisplayNameInput, onSaveDisplayName,
   usernameInput, setUsernameInput, onSaveUsername,
+  newEmailInput, setNewEmailInput, emailPasswordInput, setEmailPasswordInput, onChangeEmail,
   currentPassword, setCurrentPassword, newPassword, setNewPassword, confirmPassword, setConfirmPassword, onChangePassword,
   settingsError, settingsSuccess, settingsLoading,
+  showDeleteConfirm, setShowDeleteConfirm, deleteAccountPassword, setDeleteAccountPassword, onDeleteAccount,
 }) {
   return (
     <div>
@@ -364,6 +366,28 @@ function SettingsView({
         </button>
       </form>
 
+      <form onSubmit={onChangeEmail} className="bg-white border border-stone-200 rounded-2xl p-4 mb-3 space-y-2">
+        <label className="text-xs font-semibold text-stone-500 uppercase tracking-wide">{t('emailLabel')}</label>
+        <p className="text-xs text-stone-400">{t('settingsCurrentEmailLabel')}: {currentUser.email}</p>
+        <input
+          type="email"
+          placeholder={t('settingsNewEmailPlaceholder')}
+          value={newEmailInput}
+          onChange={(e) => setNewEmailInput(e.target.value)}
+          className="w-full px-4 py-2.5 rounded-xl border border-stone-200 focus:outline-none focus:ring-2 focus:ring-amber-400 text-sm"
+        />
+        <input
+          type="password"
+          placeholder={t('settingsCurrentPassword')}
+          value={emailPasswordInput}
+          onChange={(e) => setEmailPasswordInput(e.target.value)}
+          className="w-full px-4 py-2.5 rounded-xl border border-stone-200 focus:outline-none focus:ring-2 focus:ring-amber-400 text-sm"
+        />
+        <button type="submit" disabled={settingsLoading} className="bg-amber-500 hover:bg-amber-600 text-white px-4 py-2 rounded-xl text-sm font-medium transition disabled:opacity-50">
+          {t('settingsChangeEmailButton')}
+        </button>
+      </form>
+
       <form onSubmit={onChangePassword} className="bg-white border border-stone-200 rounded-2xl p-4 space-y-2">
         <label className="text-xs font-semibold text-stone-500 uppercase tracking-wide">{t('settingsPasswordSection')}</label>
         <input
@@ -391,6 +415,48 @@ function SettingsView({
           {t('settingsChangePasswordButton')}
         </button>
       </form>
+
+      <div className="bg-white border-2 border-red-200 rounded-2xl p-4 mt-3">
+        <label className="text-xs font-semibold text-red-500 uppercase tracking-wide">{t('settingsDangerZone')}</label>
+        {!showDeleteConfirm ? (
+          <div className="mt-2">
+            <button
+              onClick={() => setShowDeleteConfirm(true)}
+              className="bg-red-50 hover:bg-red-100 text-red-600 px-4 py-2 rounded-xl text-sm font-medium transition"
+            >
+              {t('settingsDeleteAccountButton')}
+            </button>
+          </div>
+        ) : (
+          <form onSubmit={onDeleteAccount} className="mt-2 space-y-2">
+            <p className="text-xs text-red-500">{t('settingsDeleteWarning')}</p>
+            <input
+              type="password"
+              placeholder={t('settingsDeleteConfirmPassword')}
+              value={deleteAccountPassword}
+              onChange={(e) => setDeleteAccountPassword(e.target.value)}
+              className="w-full px-4 py-2.5 rounded-xl border border-red-200 focus:outline-none focus:ring-2 focus:ring-red-400 text-sm"
+            />
+            <div className="flex gap-2">
+              <button
+                type="submit"
+                disabled={settingsLoading}
+                className="flex-1 bg-red-500 hover:bg-red-600 text-white py-2 rounded-xl text-sm font-medium transition disabled:opacity-50 flex items-center justify-center gap-2"
+              >
+                {settingsLoading && <Spinner size={14} />}
+                {t('settingsDeleteConfirmButton')}
+              </button>
+              <button
+                type="button"
+                onClick={() => { setShowDeleteConfirm(false); setDeleteAccountPassword(''); }}
+                className="flex-1 bg-stone-100 hover:bg-stone-200 text-stone-600 py-2 rounded-xl text-sm font-medium transition"
+              >
+                {t('settingsDeleteCancelButton')}
+              </button>
+            </div>
+          </form>
+        )}
+      </div>
     </div>
   );
 }
@@ -434,11 +500,15 @@ function BirthdayWishlistApp() {
   const [settingsDisplayName, setSettingsDisplayName] = useState('');
   const [settingsUsername, setSettingsUsername] = useState('');
   const [settingsCurrentPassword, setSettingsCurrentPassword] = useState('');
+  const [settingsNewEmail, setSettingsNewEmail] = useState('');
+  const [settingsEmailPassword, setSettingsEmailPassword] = useState('');
   const [settingsNewPassword, setSettingsNewPassword] = useState('');
   const [settingsConfirmPassword, setSettingsConfirmPassword] = useState('');
   const [settingsError, setSettingsError] = useState('');
   const [settingsSuccess, setSettingsSuccess] = useState('');
   const [settingsLoading, setSettingsLoading] = useState(false);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [deleteAccountPassword, setDeleteAccountPassword] = useState('');
 
   useEffect(() => {
     const unsubscribe = firebase.auth().onAuthStateChanged(async (user) => {
@@ -446,7 +516,15 @@ function BirthdayWishlistApp() {
         try {
           const doc = await firebase.firestore().collection('users').doc(user.uid).get();
           if (doc.exists) {
-            const profile = doc.data();
+            let profile = doc.data();
+            if (user.email && profile.email !== user.email) {
+              try {
+                await firebase.firestore().collection('users').doc(user.uid).update({ email: user.email });
+                profile = { ...profile, email: user.email };
+              } catch (syncErr) {
+                // non-fatal
+              }
+            }
             setCurrentUser(profile);
             setSettingsDisplayName(profile.displayName || '');
             setSettingsUsername(profile.username || '');
@@ -549,9 +627,23 @@ function BirthdayWishlistApp() {
     setAuthLoading(true);
     try {
       const idxDoc = await firebase.firestore().collection('usernameIndex').doc(uname).get();
-      if (!idxDoc.exists) { setAuthError(t('err_wrongCredentials')); setAuthLoading(false); return; }
-      const email = idxDoc.data().email;
-      await firebase.auth().signInWithEmailAndPassword(email, formPassword);
+      const isLegacy = !idxDoc.exists;
+      const email = isLegacy ? usernameToEmail(uname) : idxDoc.data().email;
+      const cred = await firebase.auth().signInWithEmailAndPassword(email, formPassword);
+      if (isLegacy) {
+        // Account predates the real-email requirement: heal the missing
+        // usernameIndex entry and backfill the email field so future logins
+        // and account-settings actions (password change, deletion) work normally.
+        try {
+          const uid = cred.user.uid;
+          await firebase.firestore().collection('usernameIndex').doc(uname).set({ email });
+          await firebase.firestore().collection('users').doc(uid).update({ email });
+          const freshDoc = await firebase.firestore().collection('users').doc(uid).get();
+          if (freshDoc.exists) setCurrentUser(freshDoc.data());
+        } catch (healErr) {
+          // Non-fatal: login already succeeded even if healing didn't fully complete.
+        }
+      }
       resetAuthForm();
     } catch (e) {
       setAuthError(t('err_wrongCredentials'));
@@ -741,6 +833,35 @@ function BirthdayWishlistApp() {
     }
   }
 
+  async function handleChangeEmail(e) {
+    e.preventDefault();
+    if (!currentUser) return;
+    setSettingsError('');
+    setSettingsSuccess('');
+    const newEmailTrimmed = settingsNewEmail.trim().toLowerCase();
+    if (!isValidEmail(newEmailTrimmed)) { setSettingsError(t('err_invalidEmail')); return; }
+    setSettingsLoading(true);
+    try {
+      const user = firebase.auth().currentUser;
+      const cred = firebase.auth.EmailAuthProvider.credential(currentUser.email, settingsEmailPassword);
+      await user.reauthenticateWithCredential(cred);
+      await user.verifyBeforeUpdateEmail(newEmailTrimmed);
+      setSettingsSuccess(t('settings_emailChangeSent', { email: newEmailTrimmed }));
+      setSettingsNewEmail('');
+      setSettingsEmailPassword('');
+    } catch (e) {
+      if (e.code === 'auth/wrong-password' || e.code === 'auth/invalid-credential') {
+        setSettingsError(t('err_wrongCurrentPassword'));
+      } else if (e.code === 'auth/email-already-in-use') {
+        setSettingsError(t('err_emailTaken'));
+      } else {
+        setSettingsError(t('err_genericError'));
+      }
+    } finally {
+      setSettingsLoading(false);
+    }
+  }
+
   async function handleChangePassword(e) {
     e.preventDefault();
     if (!currentUser) return;
@@ -765,6 +886,30 @@ function BirthdayWishlistApp() {
         setSettingsError(t('err_genericError'));
       }
     } finally {
+      setSettingsLoading(false);
+    }
+  }
+
+  async function handleDeleteAccount(e) {
+    e.preventDefault();
+    if (!currentUser) return;
+    setSettingsError('');
+    setSettingsLoading(true);
+    try {
+      const user = firebase.auth().currentUser;
+      const cred = firebase.auth.EmailAuthProvider.credential(currentUser.email, deleteAccountPassword);
+      await user.reauthenticateWithCredential(cred);
+      await firebase.firestore().collection('usernameIndex').doc(currentUser.username).delete();
+      await firebase.firestore().collection('wishlists').doc(currentUser.uid).delete();
+      await firebase.firestore().collection('users').doc(currentUser.uid).delete();
+      await user.delete();
+      // onAuthStateChanged will fire with null and reset the rest of the app state
+    } catch (e) {
+      if (e.code === 'auth/wrong-password' || e.code === 'auth/invalid-credential') {
+        setSettingsError(t('err_wrongCurrentPassword'));
+      } else {
+        setSettingsError(t('err_genericError'));
+      }
       setSettingsLoading(false);
     }
   }
@@ -949,6 +1094,11 @@ function BirthdayWishlistApp() {
               usernameInput={settingsUsername}
               setUsernameInput={setSettingsUsername}
               onSaveUsername={handleSaveUsername}
+              newEmailInput={settingsNewEmail}
+              setNewEmailInput={setSettingsNewEmail}
+              emailPasswordInput={settingsEmailPassword}
+              setEmailPasswordInput={setSettingsEmailPassword}
+              onChangeEmail={handleChangeEmail}
               currentPassword={settingsCurrentPassword}
               setCurrentPassword={setSettingsCurrentPassword}
               newPassword={settingsNewPassword}
@@ -959,6 +1109,11 @@ function BirthdayWishlistApp() {
               settingsError={settingsError}
               settingsSuccess={settingsSuccess}
               settingsLoading={settingsLoading}
+              showDeleteConfirm={showDeleteConfirm}
+              setShowDeleteConfirm={setShowDeleteConfirm}
+              deleteAccountPassword={deleteAccountPassword}
+              setDeleteAccountPassword={setDeleteAccountPassword}
+              onDeleteAccount={handleDeleteAccount}
             />
           ) : selectedUser ? (
             <UserWishlistView
