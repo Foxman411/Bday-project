@@ -136,13 +136,13 @@ function ItemCard({ t, item, ownerView, reservedByMe, reservedByOther, reserverN
   );
 }
 
-function HomeView({ t, currentUser, others, wishlists, onSelectUser, initialLoading }) {
+function HomeView({ t, currentUser, others, wishlists, reservations, onSelectUser, initialLoading }) {
   const myDays = daysUntilBirthday(currentUser.birthday);
   const myReservations = [];
   others.forEach((u) => {
     const items = wishlists[u.username] || [];
     items.forEach((item) => {
-      if (item.reservedBy === currentUser.uid) {
+      if (reservations[item.id] === currentUser.uid) {
         myReservations.push({ itemTitle: item.title, ownerName: u.displayName });
       }
     });
@@ -242,7 +242,7 @@ function MyListView({ t, items, onAdd, onEdit, onDelete, initialLoading }) {
   );
 }
 
-function UserWishlistView({ t, profile, items, currentUser, users, onBack, onToggleReserve }) {
+function UserWishlistView({ t, profile, items, currentUser, users, reservations, onBack, onToggleReserve }) {
   const days = daysUntilBirthday(profile.birthday);
   return (
     <div>
@@ -263,9 +263,10 @@ function UserWishlistView({ t, profile, items, currentUser, users, onBack, onTog
       ) : (
         <div className="space-y-3">
           {items.map((item) => {
-            const reservedByMe = item.reservedBy === currentUser.uid;
-            const reservedByOther = !!item.reservedBy && !reservedByMe;
-            const reserverName = reservedByOther ? findDisplayName(users, item.reservedBy) : null;
+            const reservedUid = reservations[item.id] || null;
+            const reservedByMe = reservedUid === currentUser.uid;
+            const reservedByOther = !!reservedUid && !reservedByMe;
+            const reserverName = reservedByOther ? findDisplayName(users, reservedUid) : null;
             return (
               <ItemCard
                 key={item.id}
@@ -518,6 +519,7 @@ function BirthdayWishlistApp() {
   const [selectedUser, setSelectedUser] = useState(null);
   const [showSettings, setShowSettings] = useState(false);
   const [wishlists, setWishlists] = useState({});
+  const [reservations, setReservations] = useState({});
   const [dataLoadedOnce, setDataLoadedOnce] = useState(false);
 
   const [showItemForm, setShowItemForm] = useState(false);
@@ -594,9 +596,21 @@ function BirthdayWishlistApp() {
       },
       () => {}
     );
+    const unsubReservations = firebase.firestore().collection('reservations').onSnapshot(
+      (snap) => {
+        const res = {};
+        snap.docs.forEach((d) => {
+          const data = d.data();
+          res[data.itemId] = data.reservedBy;
+        });
+        setReservations(res);
+      },
+      () => {}
+    );
     return () => {
       unsubUsers();
       unsubWishlists();
+      unsubReservations();
     };
   }, [currentUser]);
 
@@ -712,6 +726,7 @@ function BirthdayWishlistApp() {
     setCurrentUser(null);
     setUsers([]);
     setWishlists({});
+    setReservations({});
     setSelectedUser(null);
     setShowSettings(false);
     setView('home');
@@ -757,7 +772,6 @@ function BirthdayWishlistApp() {
         url: itemUrl.trim(),
         price: itemPrice.trim(),
         imageUrl: itemImage.trim(),
-        reservedBy: null,
       };
       newList = [...myList, newItem];
     }
@@ -788,23 +802,17 @@ function BirthdayWishlistApp() {
     }
   }
 
-  async function toggleReserve(ownerUid, itemId) {
+  async function toggleReserve(itemId, ownerUid) {
     if (!currentUser) return;
-    const ref = firebase.firestore().collection('wishlists').doc(ownerUid);
+    const ref = firebase.firestore().collection('reservations').doc(itemId);
     try {
-      await firebase.firestore().runTransaction(async (tx) => {
-        const snap = await tx.get(ref);
-        if (!snap.exists) return;
-        const data = snap.data();
-        const items = data.items || [];
-        const newItems = items.map((it) => {
-          if (it.id !== itemId) return it;
-          if (it.reservedBy === currentUser.uid) return { ...it, reservedBy: null };
-          if (it.reservedBy) return it;
-          return { ...it, reservedBy: currentUser.uid };
-        });
-        tx.update(ref, { items: newItems });
-      });
+      const existing = reservations[itemId];
+      if (existing === currentUser.uid) {
+        await ref.delete();
+      } else if (!existing) {
+        await ref.set({ itemId, ownerUid, reservedBy: currentUser.uid });
+      }
+      // if reserved by someone else, the button is disabled client-side, so no action here
     } catch (e) {
       // best effort
     }
@@ -1153,11 +1161,12 @@ function BirthdayWishlistApp() {
               items={wishlists[selectedUser.username] || []}
               currentUser={currentUser}
               users={users}
+              reservations={reservations}
               onBack={() => setSelectedUser(null)}
-              onToggleReserve={(itemId) => toggleReserve(selectedUser.uid, itemId)}
+              onToggleReserve={(itemId) => toggleReserve(itemId, selectedUser.uid)}
             />
           ) : view === 'home' ? (
-            <HomeView t={t} currentUser={currentUser} others={others} wishlists={wishlists} onSelectUser={setSelectedUser} initialLoading={!dataLoadedOnce} />
+            <HomeView t={t} currentUser={currentUser} others={others} wishlists={wishlists} reservations={reservations} onSelectUser={setSelectedUser} initialLoading={!dataLoadedOnce} />
           ) : (
             <MyListView
               t={t}
