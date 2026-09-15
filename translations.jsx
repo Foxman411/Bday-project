@@ -87,6 +87,9 @@ const TRANSLATIONS = {
     settingsNewEmailPlaceholder: 'Új email cím',
     settingsChangeEmailButton: 'Változtatás kérése',
     settings_emailChangeSent: 'Elküldtük a megerősítő linket a(z) {email} címre. Kattints rá az email cím tényleges módosításához.',
+    reservedByName: '{name} foglalta le',
+    myReservationsHeading: 'Amiket lefoglaltál ({n})',
+    myReservationsItemFor: '{name} listájáról',
   },
   en: {
     appTitle: 'Birthday Wishlist',
@@ -176,6 +179,9 @@ const TRANSLATIONS = {
     settingsNewEmailPlaceholder: 'New email address',
     settingsChangeEmailButton: 'Request change',
     settings_emailChangeSent: 'We sent a verification link to {email}. Click it to complete the change.',
+    reservedByName: 'Reserved by {name}',
+    myReservationsHeading: 'Things you\u2019ve reserved ({n})',
+    myReservationsItemFor: 'from {name}\u2019s list',
   },
   it: {
     appTitle: 'Lista dei Desideri di Compleanno',
@@ -265,6 +271,9 @@ const TRANSLATIONS = {
     settingsNewEmailPlaceholder: 'Nuovo indirizzo email',
     settingsChangeEmailButton: 'Richiedi modifica',
     settings_emailChangeSent: 'Abbiamo inviato un link di verifica a {email}. Cliccalo per completare la modifica.',
+    reservedByName: 'Prenotato da {name}',
+    myReservationsHeading: 'Cose che hai prenotato ({n})',
+    myReservationsItemFor: 'dalla lista di {name}',
   },
 };
 

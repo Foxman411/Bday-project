@@ -37,6 +37,11 @@ function avatarColor(name) {
   return AVATAR_COLORS[sum % AVATAR_COLORS.length];
 }
 
+function findDisplayName(users, uid) {
+  const u = users.find((x) => x.uid === uid);
+  return u ? u.displayName : null;
+}
+
 const LANGUAGES = [
   { code: 'hu', label: 'HU' },
   { code: 'en', label: 'EN' },
@@ -83,7 +88,7 @@ function Avatar({ name, size = 44 }) {
   );
 }
 
-function ItemCard({ t, item, ownerView, reservedByMe, reservedByOther, onEdit, onDelete, onToggleReserve }) {
+function ItemCard({ t, item, ownerView, reservedByMe, reservedByOther, reserverName, onEdit, onDelete, onToggleReserve }) {
   return (
     <div className={`bg-white border border-stone-200 rounded-2xl p-4 shadow-sm ${reservedByOther ? 'opacity-60' : ''}`}>
       <div className="flex gap-3">
@@ -124,7 +129,7 @@ function ItemCard({ t, item, ownerView, reservedByMe, reservedByOther, onEdit, o
             reservedByMe ? 'bg-emerald-50 text-emerald-700' : reservedByOther ? 'bg-stone-100 text-stone-400' : 'bg-amber-50 text-amber-700 hover:bg-amber-100'
           }`}
         >
-          ✓ {reservedByMe ? t('reservedByMe') : reservedByOther ? t('reservedByOther') : t('reserveAvailable')}
+          ✓ {reservedByMe ? t('reservedByMe') : reservedByOther ? (reserverName ? t('reservedByName', { name: reserverName }) : t('reservedByOther')) : t('reserveAvailable')}
         </button>
       )}
     </div>
@@ -133,6 +138,15 @@ function ItemCard({ t, item, ownerView, reservedByMe, reservedByOther, onEdit, o
 
 function HomeView({ t, currentUser, others, wishlists, onSelectUser, initialLoading }) {
   const myDays = daysUntilBirthday(currentUser.birthday);
+  const myReservations = [];
+  others.forEach((u) => {
+    const items = wishlists[u.username] || [];
+    items.forEach((item) => {
+      if (item.reservedBy === currentUser.uid) {
+        myReservations.push({ itemTitle: item.title, ownerName: u.displayName });
+      }
+    });
+  });
   return (
     <div className="space-y-4">
       {myDays !== null && myDays <= 60 && (
@@ -141,6 +155,21 @@ function HomeView({ t, currentUser, others, wishlists, onSelectUser, initialLoad
           <p className="text-sm font-medium">
             {myDays === 0 ? t('birthdaySoonSelfToday') : t('birthdaySoonSelf', { n: myDays })}
           </p>
+        </div>
+      )}
+      {myReservations.length > 0 && (
+        <div className="bg-emerald-50 border border-emerald-200 rounded-2xl p-4">
+          <h3 className="text-xs font-semibold text-emerald-700 uppercase tracking-wide mb-2">
+            {t('myReservationsHeading', { n: myReservations.length })}
+          </h3>
+          <ul className="space-y-1">
+            {myReservations.map((r, i) => (
+              <li key={i} className="text-sm text-emerald-800">
+                🎁 {r.itemTitle}{' '}
+                <span className="text-emerald-600 text-xs">— {t('myReservationsItemFor', { name: r.ownerName })}</span>
+              </li>
+            ))}
+          </ul>
         </div>
       )}
       <h2 className="text-sm font-semibold text-stone-500 uppercase tracking-wide px-1">{t('usersHeading')}</h2>
@@ -213,7 +242,7 @@ function MyListView({ t, items, onAdd, onEdit, onDelete, initialLoading }) {
   );
 }
 
-function UserWishlistView({ t, profile, items, currentUser, onBack, onToggleReserve }) {
+function UserWishlistView({ t, profile, items, currentUser, users, onBack, onToggleReserve }) {
   const days = daysUntilBirthday(profile.birthday);
   return (
     <div>
@@ -236,6 +265,7 @@ function UserWishlistView({ t, profile, items, currentUser, onBack, onToggleRese
           {items.map((item) => {
             const reservedByMe = item.reservedBy === currentUser.uid;
             const reservedByOther = !!item.reservedBy && !reservedByMe;
+            const reserverName = reservedByOther ? findDisplayName(users, item.reservedBy) : null;
             return (
               <ItemCard
                 key={item.id}
@@ -244,6 +274,7 @@ function UserWishlistView({ t, profile, items, currentUser, onBack, onToggleRese
                 ownerView={false}
                 reservedByMe={reservedByMe}
                 reservedByOther={reservedByOther}
+                reserverName={reserverName}
                 onToggleReserve={() => onToggleReserve(item.id)}
               />
             );
@@ -1121,6 +1152,7 @@ function BirthdayWishlistApp() {
               profile={selectedUser}
               items={wishlists[selectedUser.username] || []}
               currentUser={currentUser}
+              users={users}
               onBack={() => setSelectedUser(null)}
               onToggleReserve={(itemId) => toggleReserve(selectedUser.uid, itemId)}
             />
